@@ -33,11 +33,13 @@ def post_processing(tensor: torch.Tensor) -> Image.Image:
     return Image.fromarray(image)
 
 def train_main():
+    img_no = 1
+
     # Load data
-    content_image = Image.open('./content.jpg')
+    content_image = Image.open(f'./content_{img_no}.jpg')
     content_image = pre_processing(content_image)
 
-    style_image = Image.open('./style.jpg')
+    style_image = Image.open(f'./style_{img_no}.jpg')
     style_image = pre_processing(style_image)
 
     # Load model and losses
@@ -46,11 +48,12 @@ def train_main():
     style_loss = StyleLoss()
 
     # Hyperparameters
-    alpha = 1
-    beta = 1e6
-    learning_rate = 1
+    alpha = 8
+    beta = 1e5
+    learning_rate = 0.01
+    name_optimizer =' Adam'
 
-    save_root = f'alpha={alpha}_beta={beta}_lr={learning_rate}_initContent_style2_LBFGS'
+    save_root = f'img_no={img_no},optimizer={name_optimizer},alpha={alpha}_beta={beta}_lr={learning_rate}'
     os.makedirs(save_root, exist_ok=True)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -63,36 +66,12 @@ def train_main():
     x = content_image.clone()
     x.requires_grad_(True)
 
-    # Use SGD optimizer instead of LBFGS
-    optimizer = optim.SGD([x], lr=learning_rate)
-
-    def closure():
-        optimizer.zero_grad()
-
-        x_content_list = style_transfer(x, 'content')
-        y_content_list = style_transfer(content_image, 'content')
-        x_style_list = style_transfer(x, 'style')
-        y_style_list = style_transfer(style_image, 'style')
-
-        loss_c, loss_s = 0, 0
-        for x_style, y_style in zip(x_style_list, y_style_list):
-            loss_s += style_loss(x_style, y_style)
-        loss_s = beta * loss_s
-
-        for x_content, y_content in zip(x_content_list, y_content_list):
-            loss_c += content_loss(x_content, y_content)
-        loss_c = alpha * loss_c
-
-        loss_total = loss_c + loss_c  # original: content twice
-        loss_total.backward()
-        return loss_total
+    optimizer = optim.Adam([x], lr=learning_rate)
 
     # Train loop
-    num_epochs = 1000
-    for epoch in tqdm(range(num_epochs)):
-        # Compute gradients via closure, then update with SGD
-        _ = closure()
-        optimizer.step()
+    num_epochs = 10000
+    for epoch in tqdm(range(1, num_epochs + 1)):
+        optimizer.zero_grad()
 
         # Recompute losses for reporting
         x_content_list = style_transfer(x, 'content')
@@ -109,14 +88,18 @@ def train_main():
             loss_c += content_loss(x_content, y_content)
         loss_c = alpha * loss_c
 
-        loss_total = loss_c + loss_c  # original: content twice
+        loss_total = loss_s + loss_c
+        
+        loss_total.backward()
+        optimizer.step()
 
-        print(f"Style Loss: {np.round(loss_s.cpu().detach().numpy(), 4)}")
-        print(f"Content Loss: {np.round(loss_c.cpu().detach().numpy(), 4)}")
-        print(f"Total Loss: {np.round(loss_total.cpu().detach().numpy(), 4)}")
+        if epoch % 100 == 0:
+            print(f"Style Loss: {np.round(loss_s.cpu().detach().numpy(), 4)}")
+            print(f"Content Loss: {np.round(loss_c.cpu().detach().numpy(), 4)}")
+            print(f"Total Loss: {np.round(loss_total.cpu().detach().numpy(), 4)}")
 
-        gen_img = post_processing(x)
-        gen_img.save(os.path.join(save_root, f'{epoch}.jpg'))
+            gen_img = post_processing(x)
+            gen_img.save(os.path.join(save_root, f'{epoch}.jpg'))
 
 if __name__ == "__main__":
     train_main()
