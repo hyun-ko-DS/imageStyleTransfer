@@ -17,6 +17,7 @@ class StyleLoss(nn.Module):
 
     def gram_matrix(self, x: torch.Tensor):
         b, c, h, w = x.size()
+        print(b, c, h, w)
 
         features = x.view(b, c, h * w) # shape: (b, c, h * w) = (b, N, M)
         features_T = features.transpose(1, 2) # shape: (b, h * w, c) = (b, M, N)
@@ -29,3 +30,8 @@ class StyleLoss(nn.Module):
         gram_y = self.gram_matrix(y)
         loss = F.mse_loss(gram_x, gram_y)
         return loss
+    
+
+
+
+    
